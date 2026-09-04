@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes slideIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-surface text-text font-sans;
+  }
+  ::selection {
+    @apply bg-accent/20;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-surface-panel border border-border shadow-panel;
+  }
+  .input-field {
+    @apply w-full border border-border bg-surface-panel px-3 py-2 text-sm text-text
+      focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink transition-colors;
+  }
+  .label-field {
+    @apply block text-xs font-medium text-text-muted mb-1;
+  }
+  .btn-primary {
+    @apply bg-ink text-white text-sm font-medium px-4 py-2 hover:bg-ink-light transition-colors
+      disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-accent {
+    @apply bg-accent text-white text-sm font-medium px-4 py-2 hover:bg-accent-dark transition-colors
+      disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply border border-border text-sm font-medium px-4 py-2 text-text hover:bg-surface-sunken transition-colors;
+  }
+  .table-base {
+    @apply w-full text-sm border-collapse;
+  }
+  .table-base th {
+    @apply text-left text-xs font-semibold text-text-muted uppercase tracking-wide
+      border-b border-border py-2 px-3 bg-surface-sunken;
+  }
+  .table-base td {
+    @apply border-b border-border py-2 px-3 text-text;
+  }
+  .num {
+    @apply font-mono tabular-nums;
+  }
+}
