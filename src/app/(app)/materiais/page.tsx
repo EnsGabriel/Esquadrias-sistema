@@ -37,6 +37,23 @@ const VAZIO: Omit<Material, "id"> = {
   ativo: true,
 };
 
+const EXEMPLO_GD_FLAUTE = `Marco inferior ventana 2 rieles c/ caja de dreno;1.343;0
+Marco inferior puerta 2 rieles c/ caja de dreno;1.253;0
+Guía superior 2 rieles;1.234;0
+Marco lateral 2 rieles;0.764;0
+Guía único multi riel inferior y superior;0.303;0
+Hoja horizontal inf./sup. - ventana;0.594;0
+Hoja horizontal inf./sup. - puerta;1.147;0
+Hoja lateral y central;0.753;0
+Hoja mano amiga externa;1.382;0
+Hoja mano amiga interna;1.444;0
+Hoja central encastre con refuerzo;1.609;0
+Hoja central con refuerzo;1.519;0
+Complemento riel inferior;0.100;0
+Complemento riel;0.153;0
+Acople para multi rieles;0.201;0
+Complemento de encastre lateral;0.427;0`;
+
 export default function MateriaisPage() {
   const supabase = createClient();
   const [materiais, setMateriais] = useState<Material[]>([]);
@@ -45,6 +62,10 @@ export default function MateriaisPage() {
     null
   );
   const [carregando, setCarregando] = useState(true);
+  const [importando, setImportando] = useState(false);
+  const [importTipo, setImportTipo] = useState<"perfil" | "vidro" | "ferragem">("perfil");
+  const [importTexto, setImportTexto] = useState("");
+  const [importResultado, setImportResultado] = useState<string | null>(null);
 
   async function carregar() {
     setCarregando(true);
@@ -77,6 +98,49 @@ export default function MateriaisPage() {
     carregar();
   }
 
+  async function importarLote() {
+    setImportResultado(null);
+    const linhas = importTexto
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (linhas.length === 0) {
+      setImportResultado("Nada para importar — cole ao menos uma linha.");
+      return;
+    }
+
+    const registros = linhas.map((linha) => {
+      const partes = linha.split(";").map((p) => p.trim());
+      const [nome, peso, custo] = partes;
+      const pesoNum = Number((peso ?? "0").replace(",", "."));
+      const custoNum = Number((custo ?? "0").replace(",", "."));
+
+      const base: any = {
+        tipo: importTipo,
+        nome: nome || "Sem nome",
+        unidade: importTipo === "perfil" ? "barra" : importTipo === "vidro" ? "m2" : "un",
+        custo_unitario: isNaN(custoNum) ? 0 : custoNum,
+        ativo: true,
+      };
+      if (importTipo === "perfil") {
+        base.kg_por_metro = isNaN(pesoNum) ? null : pesoNum;
+        base.comprimento_barra_m = 6;
+      } else if (importTipo === "vidro") {
+        base.kg_por_m2 = isNaN(pesoNum) ? null : pesoNum;
+      }
+      return base;
+    });
+
+    const { error } = await supabase.from("materials").insert(registros);
+    if (error) {
+      setImportResultado(`Erro ao importar: ${error.message}`);
+      return;
+    }
+    setImportResultado(`${registros.length} materiais importados com sucesso.`);
+    carregar();
+  }
+
   const lista = materiais.filter((m) => filtro === "todos" || m.tipo === filtro);
 
   return (
@@ -85,9 +149,14 @@ export default function MateriaisPage() {
         title="Materiais"
         subtitle="Perfis de alumínio, vidros e ferragens — base real de peso e custo"
         actions={
-          <button className="btn-accent" onClick={() => setEditando(VAZIO)}>
-            + Novo material
-          </button>
+          <>
+            <button className="btn-ghost" onClick={() => { setImportando(true); setImportResultado(null); }}>
+              Importar em lote
+            </button>
+            <button className="btn-accent" onClick={() => setEditando(VAZIO)}>
+              + Novo material
+            </button>
+          </>
         }
       />
 
@@ -170,6 +239,61 @@ export default function MateriaisPage() {
           onCancel={() => setEditando(null)}
           onSalvar={salvar}
         />
+      )}
+
+      {importando && (
+        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface-panel border border-border w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-border">
+              <h2 className="font-semibold">Importar materiais em lote</h2>
+              <p className="text-sm text-text-muted mt-1">
+                Uma linha por material, no formato: <span className="font-mono">nome;peso;custo</span>.
+                Peso é kg/m (perfil) ou kg/m² (vidro). Deixe custo como 0 e ajuste depois.
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="label-field">Tipo dos materiais colados abaixo</label>
+                <select className="input-field" value={importTipo} onChange={(e) => setImportTipo(e.target.value as any)}>
+                  <option value="perfil">Perfil de alumínio</option>
+                  <option value="vidro">Vidro</option>
+                  <option value="ferragem">Ferragem</option>
+                </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="label-field mb-0">Materiais (um por linha)</label>
+                  <button
+                    className="text-xs text-ink hover:underline"
+                    onClick={() => { setImportTipo("perfil"); setImportTexto(EXEMPLO_GD_FLAUTE); }}
+                  >
+                    Preencher com exemplo (perfis GD Flaute)
+                  </button>
+                </div>
+                <textarea
+                  className="input-field font-mono text-xs"
+                  rows={12}
+                  placeholder={"Marco inferior ventana 2 rieles;1.343;0\nGuía superior 2 rieles;1.234;0"}
+                  value={importTexto}
+                  onChange={(e) => setImportTexto(e.target.value)}
+                />
+              </div>
+
+              {importResultado && (
+                <p className={`text-sm ${importResultado.startsWith("Erro") ? "text-status-danger" : "text-status-ok"}`}>
+                  {importResultado}
+                </p>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-border flex justify-end gap-2">
+              <button className="btn-ghost" onClick={() => setImportando(false)}>Fechar</button>
+              <button className="btn-primary" onClick={importarLote}>Importar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
