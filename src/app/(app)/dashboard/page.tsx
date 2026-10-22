@@ -11,6 +11,8 @@ const SITUACAO: Record<string, string> = {
   cancelada: "Cancelada",
 };
 
+const ROTA_MATERIAIS = "/materiais";
+
 export default async function DashboardPage() {
   const supabase = createClient();
 
@@ -56,9 +58,9 @@ export default async function DashboardPage() {
   // primeiros passos (calculados a partir dos dados reais)
   const passos = [
     { titulo: "Cadastrar clientes", feito: totalClientes > 0, href: "/clientes", ajuda: "Nome, telefone e endereço de quem vai comprar." },
-    { titulo: "Cadastrar perfis de alumínio", feito: perfis.length > 0, href: "/materiais", ajuda: "Use “Carregar perfis do catálogo Línea Nova”." },
-    { titulo: "Definir o preço dos perfis", feito: perfis.length > 0 && perfisSemPreco === 0, href: "/materiais", ajuda: "Escolha por kg ou por barra e aplique a todos." },
-    { titulo: "Cadastrar vidros com preço", feito: vidros.length > 0 && vidrosSemPreco === 0, href: "/materiais", ajuda: "Preço por m² de cada espessura e cor." },
+    { titulo: "Cadastrar perfis de alumínio", feito: perfis.length > 0, href: ROTA_MATERIAIS, ajuda: "Use “Carregar perfis do catálogo Línea Nova”." },
+    { titulo: "Definir o preço dos perfis", feito: perfis.length > 0 && perfisSemPreco === 0, href: ROTA_MATERIAIS, ajuda: "Escolha por kg ou por barra e aplique a todos." },
+    { titulo: "Cadastrar vidros com preço", feito: vidros.length > 0 && vidrosSemPreco === 0, href: ROTA_MATERIAIS, ajuda: "Preço por m² de cada espessura e cor." },
     { titulo: "Criar modelos de esquadria", feito: totalModelos > 0, href: "/modelos", ajuda: "A “receita” de cada tipo de janela ou porta." },
     { titulo: "Criar a primeira obra", feito: obras.length > 0, href: "/obras", ajuda: "Uma obra por cliente e projeto." },
   ];
@@ -66,8 +68,8 @@ export default async function DashboardPage() {
   const tudoPronto = passosFeitos === passos.length;
 
   const alertas: { texto: string; href: string }[] = [];
-  if (perfisSemPreco > 0) alertas.push({ texto: `${perfisSemPreco} perfil(is) sem preço. Sem preço, o orçamento sai com custo zero.`, href: "/materiais" });
-  if (vidrosSemPreco > 0) alertas.push({ texto: `${vidrosSemPreco} vidro(s) sem preço por m².`, href: "/materiais" });
+  if (perfisSemPreco > 0) alertas.push({ texto: `${perfisSemPreco} perfil(is) sem preço. Sem preço, o orçamento sai com custo zero.`, href: ROTA_MATERIAIS });
+  if (vidrosSemPreco > 0) alertas.push({ texto: `${vidrosSemPreco} vidro(s) sem preço por m².`, href: ROTA_MATERIAIS });
 
   return (
     <div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import PageHeader from "@/components/PageHeader";
+import { gravarJSON, lerJSON } from "@/lib/storage";
 
 type Etapa = {
   id: string;
@@ -120,18 +121,14 @@ export default function TutorialPage() {
   const [pronto, setPronto] = useState(false);
 
   useEffect(() => {
-    try {
-      setFeitos(JSON.parse(localStorage.getItem(CHAVE) ?? "{}"));
-    } catch {}
+    setFeitos(lerJSON<Record<string, boolean>>(CHAVE, {}));
     setPronto(true);
   }, []);
 
   function alternar(id: string) {
     const novo = { ...feitos, [id]: !feitos[id] };
     setFeitos(novo);
-    try {
-      localStorage.setItem(CHAVE, JSON.stringify(novo));
-    } catch {}
+    gravarJSON(CHAVE, novo);
   }
 
   const total = ETAPAS.length;

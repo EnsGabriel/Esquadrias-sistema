@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { gravarJSON, lerJSON } from "@/lib/storage";
 
 // Moeda base do banco de dados: guaraníes (PYG). A tela converte para R$ quando escolhido.
 export type Moeda = "PYG" | "BRL";
@@ -28,7 +29,7 @@ type Ctx = {
 const MoedaContext = createContext<Ctx | null>(null);
 
 function milhares(n: number) {
-  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return Math.round(n).toLocaleString("de-DE");
 }
 
 export function MoedaProvider({ children }: { children: React.ReactNode }) {
@@ -37,17 +38,13 @@ export function MoedaProvider({ children }: { children: React.ReactNode }) {
 
   // carrega a preferência salva neste navegador
   useEffect(() => {
-    try {
-      const salvo = JSON.parse(localStorage.getItem(CHAVE) ?? "null");
-      if (salvo?.moeda === "PYG" || salvo?.moeda === "BRL") setMoedaState(salvo.moeda);
-      if (typeof salvo?.taxa === "number" && salvo.taxa > 0) setTaxaState(salvo.taxa);
-    } catch {}
+    const salvo = lerJSON<{ moeda?: string; taxa?: number } | null>(CHAVE, null);
+    if (salvo?.moeda === "PYG" || salvo?.moeda === "BRL") setMoedaState(salvo.moeda);
+    if (typeof salvo?.taxa === "number" && salvo.taxa > 0) setTaxaState(salvo.taxa);
   }, []);
 
   function persistir(m: Moeda, t: number) {
-    try {
-      localStorage.setItem(CHAVE, JSON.stringify({ moeda: m, taxa: t }));
-    } catch {}
+    gravarJSON(CHAVE, { moeda: m, taxa: t });
   }
 
   const valor = useMemo<Ctx>(() => {

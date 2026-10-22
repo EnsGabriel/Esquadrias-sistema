@@ -5,6 +5,7 @@ import PageHeader from "@/components/PageHeader";
 import VidroSelect, { type VidroOpcao } from "@/components/VidroSelect";
 import { createClient } from "@/lib/supabase/client";
 import { useMoeda } from "@/lib/moeda";
+import { gravarJSON, lerJSON } from "@/lib/storage";
 import { LINHAS, TIPOLOGIAS_NOVA, DESCRICAO_CORTE } from "@/lib/tipologiasNova";
 import {
   achaTipologia,
@@ -17,6 +18,9 @@ import {
 } from "@/lib/calc/pedidoFabrica";
 
 const CHAVE_RASCUNHO = "esquadrias:pedido-fabrica";
+
+const sufixoNota = (nota?: string) => (nota ? ` (${nota})` : "");
+const sufixoRotulo = (rotulo?: string) => (rotulo ? ` ${rotulo}` : "");
 
 const fmtMm = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 const fmtNum = (n: number, casas = 2) => n.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -54,18 +58,14 @@ export default function PedidoFabricaPage() {
       .select("id, nome, tipo, cor_acabamento, espessura_mm, custo_unitario, kg_por_metro, comprimento_barra_m, unidade")
       .in("tipo", ["perfil", "vidro"])
       .then(({ data }) => setMateriais((data as MaterialPedido[]) ?? []));
-    try {
-      const salvo = JSON.parse(localStorage.getItem(CHAVE_RASCUNHO) ?? "null");
-      if (salvo?.itens) setItens(salvo.itens);
-      if (typeof salvo?.referencia === "string") setReferencia(salvo.referencia);
-    } catch {}
+    const salvo = lerJSON<{ itens?: ItemPedido[]; referencia?: string } | null>(CHAVE_RASCUNHO, null);
+    if (salvo?.itens) setItens(salvo.itens);
+    if (typeof salvo?.referencia === "string") setReferencia(salvo.referencia);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAVE_RASCUNHO, JSON.stringify({ itens, referencia }));
-    } catch {}
+    gravarJSON(CHAVE_RASCUNHO, { itens, referencia });
   }, [itens, referencia]);
 
   const tip = achaTipologia(tipologiaId)!;
@@ -128,7 +128,7 @@ export default function PedidoFabricaPage() {
     linhas.push("");
     linhas.push("PERFIS (código — medida mm — qtd — corte)");
     resultado.perfis.forEach((l) =>
-      linhas.push(`${l.codigo} ${l.nome}${l.nota ? ` (${l.nota})` : ""} — ${fmtMm(l.medidaMm)} — ${l.qtd} — ${DESCRICAO_CORTE[l.corte]}`)
+      linhas.push(`${l.codigo} ${l.nome}${sufixoNota(l.nota)} — ${fmtMm(l.medidaMm)} — ${l.qtd} — ${DESCRICAO_CORTE[l.corte]}`)
     );
     linhas.push("");
     linhas.push("BARRAS A COMPRAR");
@@ -138,7 +138,7 @@ export default function PedidoFabricaPage() {
     linhas.push("");
     linhas.push("VIDROS (largura x altura mm — qtd)");
     resultado.vidros.forEach((v) =>
-      linhas.push(`${v.descricao}${v.rotulo ? ` ${v.rotulo}` : ""} — ${fmtMm(v.larguraMm)} x ${fmtMm(v.alturaMm)} — ${v.qtd} un`)
+      linhas.push(`${v.descricao}${sufixoRotulo(v.rotulo)} — ${fmtMm(v.larguraMm)} x ${fmtMm(v.alturaMm)} — ${v.qtd} un`)
     );
     return linhas.join("\n");
   }
