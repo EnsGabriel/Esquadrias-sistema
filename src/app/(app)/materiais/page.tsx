@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import PageHeader from "@/components/PageHeader";
+import TabelaPrecoVidros from "@/components/TabelaPrecoVidros";
+import PrecoPerfis from "@/components/PrecoPerfis";
+import { PERFIS_NOVA } from "@/lib/perfisNova";
+import { useMoeda } from "@/lib/moeda";
+import { VIDROS_PADRAO } from "@/lib/vidrosPadrao";
 
 type Material = {
   id: string;
@@ -26,7 +31,7 @@ const VAZIO: Omit<Material, "id"> = {
   nome: "",
   linha: "",
   cor_acabamento: "",
-  unidade: "barra",
+  unidade: "kg",
   kg_por_metro: null,
   comprimento_barra_m: 6,
   kg_por_m2: null,
@@ -56,6 +61,7 @@ Complemento de encastre lateral;0.427;0`;
 
 export default function MateriaisPage() {
   const supabase = createClient();
+  const { fmt, simbolo, lerNumero, paraBanco } = useMoeda();
   const [materiais, setMateriais] = useState<Material[]>([]);
   const [filtro, setFiltro] = useState<"todos" | "perfil" | "vidro" | "ferragem">("todos");
   const [editando, setEditando] = useState<Material | (Omit<Material, "id"> & { id?: string }) | null>(
@@ -92,6 +98,80 @@ export default function MateriaisPage() {
     carregar();
   }
 
+  // Atualiza só o preço (por m² no caso do vidro; valor já em guaraníes) sem recarregar a lista toda
+  async function salvarPreco(id: string, valor: number): Promise<boolean> {
+    const { error } = await supabase.from("materials").update({ custo_unitario: valor }).eq("id", id);
+    if (error) {
+      alert(`Não foi possível salvar o preço: ${error.message}`);
+      return false;
+    }
+    setMateriais((prev) => prev.map((m) => (m.id === id ? { ...m, custo_unitario: valor } : m)));
+    return true;
+  }
+
+  // Cadastra (ou completa o preço de) os vidros da tabela padrão, em guaraníes
+  async function carregarVidrosPadrao() {
+    const existentes = materiais.filter((m) => m.tipo === "vidro");
+    const porNome = new Map(existentes.map((m) => [m.nome.toLowerCase(), m]));
+    const novos = VIDROS_PADRAO.filter((v) => !porNome.has(v.nome.toLowerCase())).map((v) => ({
+      tipo: "vidro",
+      unidade: "m2",
+      ativo: true,
+      ...v,
+    }));
+    const semPreco = VIDROS_PADRAO.filter((v) => {
+      const e = porNome.get(v.nome.toLowerCase());
+      return e && !(e.custo_unitario > 0);
+    });
+
+    if (novos.length === 0 && semPreco.length === 0) {
+      alert("Todos os vidros da tabela padrão já estão cadastrados com preço.");
+      return;
+    }
+    if (novos.length > 0) {
+      const { error } = await supabase.from("materials").insert(novos);
+      if (error) return alert(`Erro ao cadastrar vidros: ${error.message}`);
+    }
+    for (const v of semPreco) {
+      const e = porNome.get(v.nome.toLowerCase())!;
+      await supabase.from("materials").update({ custo_unitario: v.custo_unitario }).eq("id", e.id);
+    }
+    carregar();
+  }
+
+  // Define a forma de cobrança (kg ou barra) e o preço de todos os perfis
+  async function aplicarPrecoPerfis(base: "kg" | "barra", precoPYG: number) {
+    const { error } = await supabase
+      .from("materials")
+      .update({ unidade: base, custo_unitario: precoPYG })
+      .eq("tipo", "perfil");
+    if (error) alert(`Erro ao aplicar: ${error.message}`);
+    carregar();
+  }
+
+  // Cadastra os perfis do catálogo Línea Nova que ainda não existem (peso em kg/m)
+  async function carregarPerfisNova() {
+    const existentes = materiais.filter((m) => m.tipo === "perfil").map((m) => m.nome.toUpperCase());
+    const novos = PERFIS_NOVA.filter((p) => !existentes.some((n) => n.includes(p.codigo))).map((p) => ({
+      tipo: "perfil",
+      nome: `${p.codigo} - ${p.nome}`,
+      linha: "Nova",
+      unidade: "kg",
+      kg_por_metro: p.kg_por_metro,
+      comprimento_barra_m: 6,
+      custo_unitario: 0,
+      ativo: true,
+    }));
+    if (novos.length === 0) {
+      alert("Todos os perfis do catálogo Nova já estão cadastrados.");
+      return;
+    }
+    const { error } = await supabase.from("materials").insert(novos);
+    if (error) return alert(`Erro ao cadastrar perfis: ${error.message}`);
+    alert(`${novos.length} perfis cadastrados. Agora defina o preço por kg (ou por barra) no painel de perfis.`);
+    carregar();
+  }
+
   async function remover(id: string) {
     if (!confirm("Remover este material? Modelos que o usam ficarão sem referência.")) return;
     await supabase.from("materials").delete().eq("id", id);
@@ -114,12 +194,13 @@ export default function MateriaisPage() {
       const partes = linha.split(";").map((p) => p.trim());
       const [nome, peso, custo] = partes;
       const pesoNum = Number((peso ?? "0").replace(",", "."));
-      const custoNum = Number((custo ?? "0").replace(",", "."));
+      const custoLido = lerNumero(custo ?? "0");
+      const custoNum = custoLido === null ? 0 : paraBanco(custoLido);
 
       const base: any = {
         tipo: importTipo,
         nome: nome || "Sem nome",
-        unidade: importTipo === "perfil" ? "barra" : importTipo === "vidro" ? "m2" : "un",
+        unidade: importTipo === "perfil" ? "kg" : importTipo === "vidro" ? "m2" : "un",
         custo_unitario: isNaN(custoNum) ? 0 : custoNum,
         ativo: true,
       };
@@ -176,6 +257,33 @@ export default function MateriaisPage() {
         ))}
       </div>
 
+      {(filtro === "todos" || filtro === "perfil") && (
+        <div className="px-4 sm:px-6 lg:px-8 pt-4">
+          <PrecoPerfis
+            total={materiais.filter((m) => m.tipo === "perfil").length}
+            semPreco={materiais.filter((m) => m.tipo === "perfil" && !(m.custo_unitario > 0)).length}
+            porKg={materiais.filter((m) => m.tipo === "perfil" && m.unidade === "kg").length}
+            porBarra={materiais.filter((m) => m.tipo === "perfil" && m.unidade === "barra").length}
+            onAplicar={aplicarPrecoPerfis}
+            onCarregarNova={carregarPerfisNova}
+          />
+        </div>
+      )}
+
+      {(filtro === "todos" || filtro === "vidro") && (
+        <div className="px-4 sm:px-6 lg:px-8 pt-4">
+          <TabelaPrecoVidros
+            vidros={materiais.filter((m) => m.tipo === "vidro")}
+            onSalvarPreco={salvarPreco}
+            onEditar={(id) => {
+              const m = materiais.find((x) => x.id === id);
+              if (m) setEditando(m);
+            }}
+            onCarregarPadrao={carregarVidrosPadrao}
+          />
+        </div>
+      )}
+
       <div className="p-4 sm:p-6 lg:p-8 pt-4">
         <div className="panel overflow-x-auto">
           <table className="table-base">
@@ -187,7 +295,7 @@ export default function MateriaisPage() {
                 <th>Unidade</th>
                 <th>Peso</th>
                 <th>Dimensão padrão</th>
-                <th>Custo unitário</th>
+                <th>Custo unitário ({simbolo})</th>
                 <th></th>
               </tr>
             </thead>
@@ -215,7 +323,11 @@ export default function MateriaisPage() {
                     {m.tipo === "ferragem" ? "—" : ""}
                   </td>
                   <td className="num">
-                    {m.custo_unitario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    {fmt(m.custo_unitario)}
+                    {m.tipo === "vidro" && <span className="text-text-faint"> /m²</span>}
+                    {m.tipo === "perfil" && (
+                      <span className="text-text-faint"> /{m.unidade === "kg" ? "kg" : m.unidade === "barra" ? "barra" : "m"}</span>
+                    )}
                   </td>
                   <td>
                     <button onClick={() => setEditando(m)} className="text-xs text-ink hover:underline mr-3">
@@ -248,7 +360,7 @@ export default function MateriaisPage() {
               <h2 className="font-semibold">Importar materiais em lote</h2>
               <p className="text-sm text-text-muted mt-1">
                 Uma linha por material, no formato: <span className="font-mono">nome;peso;custo</span>.
-                Peso é kg/m (perfil) ou kg/m² (vidro). Deixe custo como 0 e ajuste depois.
+                Peso é kg/m (perfil) ou kg/m² (vidro). O custo é na moeda selecionada no menu ({simbolo}); deixe 0 e ajuste depois, se preferir.
               </p>
             </div>
 
@@ -316,7 +428,22 @@ function ModalMaterial({
   onCancel: () => void;
   onSalvar: () => void;
 }) {
+  const { simbolo, lerNumero, paraBanco, textoEdicao } = useMoeda();
+  const [custoTxt, setCustoTxt] = useState(
+    material.custo_unitario > 0 ? textoEdicao(material.custo_unitario) : ""
+  );
+
   function set(field: string, value: any) {
+    // vidro: sugere o peso (≈ 2,5 kg/m² por mm de espessura) se ainda não foi preenchido
+    if (field === "espessura_mm" && material.tipo === "vidro" && !material.kg_por_m2 && value > 0) {
+      onChange({ ...material, espessura_mm: value, kg_por_m2: Math.round(value * 2.5 * 100) / 100 });
+      return;
+    }
+    if (field === "tipo") {
+      const unidade = value === "perfil" ? "kg" : value === "vidro" ? "m2" : "un";
+      onChange({ ...material, tipo: value, unidade });
+      return;
+    }
     onChange({ ...material, [field]: value });
   }
 
@@ -397,17 +524,34 @@ function ModalMaterial({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label-field">Unidade de compra</label>
+              <label className="label-field">{material.tipo === "perfil" ? "Como o fornecedor cobra" : "Unidade de compra"}</label>
               <select className="input-field" value={material.unidade} onChange={(e) => set("unidade", e.target.value)}>
-                <option value="barra">Barra</option>
-                <option value="kg">Kg</option>
-                <option value="m2">M²</option>
-                <option value="un">Unidade</option>
+                {material.tipo === "perfil" && (
+                  <>
+                    <option value="kg">Por kg (peso)</option>
+                    <option value="barra">Por barra</option>
+                  </>
+                )}
+                {material.tipo === "vidro" && <option value="m2">M²</option>}
+                {material.tipo === "ferragem" && <option value="un">Unidade</option>}
               </select>
             </div>
             <div>
-              <label className="label-field">Custo unitário (R$)</label>
-              <input type="number" step="0.01" className="input-field" value={material.custo_unitario} onChange={(e) => set("custo_unitario", Number(e.target.value))} />
+              <label className="label-field">{material.tipo === "vidro"
+                ? `Preço do vidro por m² (${simbolo})`
+                : material.tipo === "perfil"
+                ? `Preço do perfil por ${material.unidade === "barra" ? "barra" : "kg"} (${simbolo})`
+                : `Custo unitário (${simbolo})`}</label>
+              <input
+                inputMode="decimal"
+                className="input-field num"
+                value={custoTxt}
+                onChange={(e) => {
+                  setCustoTxt(e.target.value);
+                  const n = lerNumero(e.target.value);
+                  set("custo_unitario", n === null ? 0 : paraBanco(n));
+                }}
+              />
             </div>
           </div>
         </div>

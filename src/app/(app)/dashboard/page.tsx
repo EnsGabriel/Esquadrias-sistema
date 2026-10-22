@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import PageHeader from "@/components/PageHeader";
+import { Dinheiro } from "@/lib/moeda";
 
 export default async function DashboardPage() {
   const supabase = createClient();
@@ -30,14 +31,14 @@ export default async function DashboardPage() {
         <Indicador label="Clientes cadastrados" valor={String(totalClientes ?? 0)} />
         <Indicador
           label="Em orçamento (aberto)"
-          valor={valorEmAberto.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+          valor={<Dinheiro valor={valorEmAberto} />}
         />
       </div>
     </div>
   );
 }
 
-function Indicador({ label, valor }: { label: string; valor: string }) {
+function Indicador({ label, valor }: { label: string; valor: React.ReactNode }) {
   return (
     <div className="panel p-5">
       <p className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">{label}</p>

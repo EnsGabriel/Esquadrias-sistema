@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { SeletorMoeda } from "@/lib/moeda";
 
 type Role = "admin" | "vendedor" | "cliente";
 
@@ -13,6 +14,7 @@ const NAV = [
   { href: "/modelos", label: "Modelos de esquadria", roles: ["admin", "vendedor"] as Role[] },
   { href: "/materiais", label: "Materiais", roles: ["admin", "vendedor"] as Role[] },
   { href: "/compras", label: "Compras e corte", roles: ["admin", "vendedor"] as Role[] },
+  { href: "/pedido-fabrica", label: "Pedido à fábrica", roles: ["admin", "vendedor"] as Role[] },
 ];
 
 export default function Sidebar({
@@ -66,6 +68,8 @@ export default function Sidebar({
           );
         })}
       </nav>
+
+      <SeletorMoeda />
 
       <div className="px-5 py-4 border-t border-white/10 shrink-0">
         <p className="text-sm text-white truncate">{nome}</p>
