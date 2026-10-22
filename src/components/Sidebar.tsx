@@ -15,6 +15,7 @@ const NAV = [
   { href: "/materiais", label: "Materiais", roles: ["admin", "vendedor"] as Role[] },
   { href: "/compras", label: "Compras e corte", roles: ["admin", "vendedor"] as Role[] },
   { href: "/pedido-fabrica", label: "Pedido à fábrica", roles: ["admin", "vendedor"] as Role[] },
+  { href: "/tutorial", label: "Tutorial", roles: ["admin", "vendedor", "cliente"] as Role[] },
 ];
 
 export default function Sidebar({
