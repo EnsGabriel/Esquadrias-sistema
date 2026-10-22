@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Sidebar from "@/components/Sidebar";
+import { MoedaProvider } from "@/lib/moeda";
 
 type Role = "admin" | "vendedor" | "cliente";
 
@@ -17,6 +18,7 @@ export default function AppShell({
   const [aberto, setAberto] = useState(false);
 
   return (
+    <MoedaProvider>
     <div className="flex min-h-screen">
       {/* Sidebar fixa - desktop (md e acima) */}
       <div className="hidden md:block md:sticky md:top-0 md:h-screen">
@@ -57,5 +59,6 @@ export default function AppShell({
         <main className="flex-1 min-w-0">{children}</main>
       </div>
     </div>
+    </MoedaProvider>
   );
 }

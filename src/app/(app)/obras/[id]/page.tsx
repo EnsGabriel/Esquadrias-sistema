@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import PageHeader from "@/components/PageHeader";
 import DesenhoVao from "@/components/DesenhoVao";
+import VidroSelect from "@/components/VidroSelect";
+import { useMoeda } from "@/lib/moeda";
 import { calcularItem, ModelComponent, MaterialLite } from "@/lib/calc/esquadria";
 
 type Modelo = { id: string; nome: string; tipo: string; aceita_vidro: boolean };
@@ -16,6 +18,10 @@ type Material = {
   kg_por_m2: number | null;
   custo_unitario: number;
   comprimento_barra_m: number | null;
+  espessura_mm: number | null;
+  largura_chapa_m: number | null;
+  altura_chapa_m: number | null;
+  unidade: string | null;
 };
 type ItemOrcamento = {
   id: string;
@@ -29,10 +35,12 @@ type ItemOrcamento = {
   custo_calc: number;
   preco_venda_calc: number;
   esquadria_models?: { nome: string };
+  materials?: { nome: string; espessura_mm: number | null; cor_acabamento: string | null } | null;
 };
 
 export default function ObraDetalhePage({ params }: { params: { id: string } }) {
   const supabase = createClient();
+  const { fmt: fmtMoeda } = useMoeda();
   const [obra, setObra] = useState<any>(null);
   const [budgetId, setBudgetId] = useState<string | null>(null);
   const [margemPadrao, setMargemPadrao] = useState(30);
@@ -78,7 +86,7 @@ export default function ObraDetalhePage({ params }: { params: { id: string } }) 
 
       const { data: itensData } = await supabase
         .from("budget_items")
-        .select("*, esquadria_models(nome)")
+        .select("*, esquadria_models(nome), materials:vidro_material_id(nome, espessura_mm, cor_acabamento)")
         .eq("budget_id", budget.id)
         .order("created_at");
       setItens((itensData as ItemOrcamento[]) ?? []);
@@ -199,12 +207,12 @@ export default function ObraDetalhePage({ params }: { params: { id: string } }) 
                 {modeloAtual?.aceita_vidro && (
                   <div>
                     <label className="label-field">Vidro</label>
-                    <select className="input-field" value={vidroId} onChange={(e) => setVidroId(e.target.value)}>
-                      <option value="">Sem vidro</option>
-                      {vidrosDisponiveis.map((v) => (
-                        <option key={v.id} value={v.id}>{v.nome} {v.cor_acabamento ? `— ${v.cor_acabamento}` : ""}</option>
-                      ))}
-                    </select>
+                    <VidroSelect
+                      vidros={vidrosDisponiveis}
+                      value={vidroId}
+                      onChange={setVidroId}
+                      areaM2={(larguraMm / 1000) * (alturaMm / 1000)}
+                    />
                   </div>
                 )}
                 <div>
@@ -226,7 +234,9 @@ export default function ObraDetalhePage({ params }: { params: { id: string } }) 
           {calculo && (
             <div className="mt-6 border-t border-border pt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <Metrica label="Perfil" valor={`${calculo.perfilMetrosLineares.toFixed(2)} m`} />
-              <Metrica label="Vidro" valor={`${calculo.vidroAreaM2.toFixed(2)} m²`} />
+              <Metrica label="Vidro (área)" valor={`${calculo.vidroAreaM2.toFixed(2)} m²`} />
+              <Metrica label="Vidro (custo un.)" valor={fmtMoeda(calculo.custoVidro)} />
+              <Metrica label="Perfil (custo un.)" valor={fmtMoeda(calculo.custoPerfil)} />
               <Metrica label="Peso (un.)" valor={`${calculo.pesoTotalKg.toFixed(2)} kg`} />
               <Metrica label="Custo (un.)" valor={fmtMoeda(calculo.custoTotal)} />
               <Metrica label="Preço venda (un.)" valor={fmtMoeda(calculo.precoVendaUnitario)} destaque />
@@ -252,6 +262,13 @@ export default function ObraDetalhePage({ params }: { params: { id: string } }) 
                   <p className="text-xs text-text-muted num">
                     {item.largura_mm}×{item.altura_mm}mm · {item.quantidade}un
                   </p>
+                  {item.materials && (
+                    <p className="text-xs text-text-muted">
+                      Vidro: {item.materials.nome}
+                      {item.materials.espessura_mm ? ` ${item.materials.espessura_mm}mm` : ""}
+                      {item.materials.cor_acabamento ? ` — ${item.materials.cor_acabamento}` : ""}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-sm num font-medium">{fmtMoeda(item.preco_venda_calc)}</p>
@@ -279,8 +296,4 @@ function Metrica({ label, valor, destaque }: { label: string; valor: string; des
       <p className={`num font-medium ${destaque ? "text-accent-dark" : "text-text"}`}>{valor}</p>
     </div>
   );
-}
-
-function fmtMoeda(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }

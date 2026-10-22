@@ -13,9 +13,18 @@ export type MaterialLite = {
   tipo: "perfil" | "vidro" | "ferragem";
   kg_por_metro: number | null;
   kg_por_m2: number | null;
-  custo_unitario: number; // por metro (perfil), por m² (vidro), por unidade (ferragem)
+  custo_unitario: number; // perfil: conforme "unidade" (kg ou barra); vidro: por m²; ferragem: por unidade
   comprimento_barra_m: number | null;
+  unidade?: string | null; // perfil: "kg" (preço por kg), "barra" (preço por barra); outro = por metro
 };
+
+// Custo de um trecho de perfil conforme a forma como o fornecedor cobra.
+export function custoDoPerfil(material: MaterialLite, metros: number): number {
+  const preco = material.custo_unitario ?? 0;
+  if (material.unidade === "kg") return metros * (material.kg_por_metro ?? 0) * preco;
+  if (material.unidade === "barra") return (metros / (material.comprimento_barra_m || 6)) * preco;
+  return metros * preco;
+}
 
 export type CalculoItemInput = {
   largura_mm: number;
@@ -62,7 +71,7 @@ export function calcularItem(input: CalculoItemInput): CalculoItemResultado {
 
       perfilMetrosLineares += metros;
       pesoPerfilKg += metros * (material.kg_por_metro ?? 0);
-      custoPerfil += metros * material.custo_unitario;
+      custoPerfil += custoDoPerfil(material, metros);
     }
 
     if (material.tipo === "ferragem" && comp.tipo_consumo === "unidade") {

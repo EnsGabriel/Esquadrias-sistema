@@ -3,14 +3,16 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import PageHeader from "@/components/PageHeader";
+import { useMoeda } from "@/lib/moeda";
 import { otimizarCorte1D, PecaCorte, ResultadoCorte1D } from "@/lib/calc/cutting1d";
 import { otimizarCorte2D, PecaVidro, ResultadoCorte2D } from "@/lib/calc/cutting2d";
 
 type Obra = { id: string; nome: string };
-type LinhaCompra = { materialId: string; nome: string; tipo: string; unidade: string; quantidade: number; custoTotal: number };
+type LinhaCompra = { materialId: string; nome: string; tipo: string; unidade: string; quantidade: number; custoTotal: number; detalhe?: string };
 
 export default function ComprasPage() {
   const supabase = createClient();
+  const { fmt } = useMoeda();
   const [obras, setObras] = useState<Obra[]>([]);
   const [obraId, setObraId] = useState("");
   const [carregando, setCarregando] = useState(false);
@@ -98,8 +100,8 @@ export default function ComprasPage() {
           if (!compraPorMaterial[material.id]) {
             compraPorMaterial[material.id] = { materialId: material.id, nome: material.nome, tipo: "perfil", unidade: "m", quantidade: 0, custoTotal: 0 };
           }
+          // o custo do perfil é calculado depois do plano de corte (barras inteiras)
           compraPorMaterial[material.id].quantidade += metrosTotal;
-          compraPorMaterial[material.id].custoTotal += metrosTotal * material.custo_unitario;
         }
 
         if (material.tipo === "ferragem" && comp.tipo_consumo === "unidade") {
@@ -134,8 +136,6 @@ export default function ComprasPage() {
       }
     }
 
-    setListaCompras(Object.values(compraPorMaterial).sort((a, b) => a.tipo.localeCompare(b.tipo)));
-
     const resultadosPerfil: Record<string, ResultadoCorte1D> = {};
     for (const [materialId, pecas] of Object.entries(pecasPerfilPorMaterial)) {
       const material = materiaisById[materialId];
@@ -143,6 +143,22 @@ export default function ComprasPage() {
       resultadosPerfil[materialId] = otimizarCorte1D(pecas, comprimentoBarra);
     }
     setCortesPerfil(resultadosPerfil);
+
+    // Perfis: metros, barras inteiras a comprar, peso e custo conforme a cobrança (kg ou barra)
+    for (const [materialId, corte] of Object.entries(resultadosPerfil)) {
+      const material = materiaisById[materialId];
+      const linha = compraPorMaterial[materialId];
+      if (!material || !linha) continue;
+      const compBarra = material.comprimento_barra_m ?? 6;
+      const barras = corte.totalBarrasUsadas;
+      const kgPorM = material.kg_por_metro ?? 0;
+      const pesoBarrasKg = barras * compBarra * kgPorM;
+      linha.detalhe = `${barras} ${barras === 1 ? "barra" : "barras"} de ${compBarra} m · ${pesoBarrasKg.toFixed(1)} kg (barras inteiras)`;
+      if (material.unidade === "kg") linha.custoTotal = pesoBarrasKg * material.custo_unitario;
+      else if (material.unidade === "barra") linha.custoTotal = barras * material.custo_unitario;
+      else linha.custoTotal = linha.quantidade * material.custo_unitario;
+    }
+    setListaCompras(Object.values(compraPorMaterial).sort((a, b) => a.tipo.localeCompare(b.tipo)));
 
     const resultadosVidro: Record<string, ResultadoCorte2D> = {};
     for (const [materialId, pecas] of Object.entries(pecasVidroPorMaterial)) {
@@ -185,8 +201,11 @@ export default function ComprasPage() {
                     <tr key={l.materialId}>
                       <td className="font-medium">{l.nome}</td>
                       <td className="capitalize">{l.tipo}</td>
-                      <td className="num">{l.quantidade.toFixed(2)} {l.unidade}</td>
-                      <td className="num">{l.custoTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                      <td className="num">
+                        {l.quantidade.toFixed(2)} {l.unidade}
+                        {l.detalhe && <span className="block text-xs text-text-muted">{l.detalhe}</span>}
+                      </td>
+                      <td className="num">{fmt(l.custoTotal)}</td>
                     </tr>
                   ))}
                 </tbody>
